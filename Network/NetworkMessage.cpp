@@ -87,7 +87,7 @@ namespace NetworkMessage
 #endif
       quint32 type;
       *parent >> type >> id_;
-      if (type >= maximum_message_type_)
+      if (!is_known_type (type))
         {
           qDebug () << "Unrecognized message type:" << type << "from id:" << id_;
           type_ = maximum_message_type_;

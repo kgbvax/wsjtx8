@@ -127,6 +127,20 @@ public:
   // this signal is emitted if the server has sent information about a callsign
   Q_SIGNAL void annotation_info (QString const& dx_call, bool sort_order_provided, quint32 sort_order);
 
+  // Extension messages of this fork, see NetworkMessage.hpp
+
+  // this signal is emitted if the server has requested "Enable Tx"
+  // to be set to the given state
+  Q_SIGNAL void enable_tx (bool enable);
+
+  // this signal is emitted if the server has requested a CQ, the
+  // modifier is the directed CQ word or empty for a plain CQ
+  Q_SIGNAL void start_cq (QString const& modifier);
+
+  // this signal is emitted if the server has requested a new Tx
+  // audio offset in Hz
+  Q_SIGNAL void set_tx_offset (quint32 offset);
+
   // this signal is emitted when network errors occur or if a host
   // lookup fails
   Q_SIGNAL void error (QString const&) const;

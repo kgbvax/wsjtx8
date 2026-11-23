@@ -529,6 +529,64 @@
  *      ffffffff will remove the sort-order value from the internal table.
  *      Callsigns without a sort order will be valued at zero for sorting purposes
  *      in the hound display.
+ *
+ *
+ * Extension messages
+ * ------------------
+ *
+ * This fork adds the following messages for automation clients such
+ * as 75auto. They have fixed type values from 50, so that new
+ * upstream message types cannot collide with them. The incoming
+ * extension messages are handled only while the "Accept UDP
+ * requests" option is on. The Extensions message is sent only while
+ * that option is on.
+ *
+ * Extensions     Out      50                     quint32
+ *                         Id (unique key)        utf8
+ *                         Version                quint32
+ *                         Names                  utf8
+ *
+ *      Sent after each Heartbeat message. "Version" is the version
+ *      of the extension contract, currently 1. "Names" is a comma
+ *      separated list of the supported extensions, currently
+ *      "tx-enable,cq,set-tx-df". A server must ignore names that it
+ *      does not know.
+ *
+ *
+ * Enable Tx      In       51                     quint32
+ *                         Id (unique key)        utf8
+ *                         Enable                 bool
+ *
+ *      Sets the "Enable Tx" button to the state of "Enable". If the
+ *      button already has that state, nothing changes. Extension
+ *      name "tx-enable".
+ *
+ *
+ * Start CQ       In       52                     quint32
+ *                         Id (unique key)        utf8
+ *                         Modifier               utf8
+ *
+ *      Generates the standard messages, selects the CQ message (Tx6)
+ *      and turns "Enable Tx" on. "Modifier" is the word of a directed
+ *      CQ, for example "DX" or "EU", with the rules of the Tx6 field:
+ *      1 to 4 letters or 1 to 3 digits. An empty modifier gives a
+ *      plain CQ. A message with an invalid modifier is ignored. A
+ *      transmission in progress is not interrupted; the CQ goes out
+ *      in the next Tx period of the selected period parity. The Tx
+ *      offset does not change and the Tx watchdog is not reset.
+ *      Extension name "cq".
+ *
+ *
+ * Set Tx Offset  In       53                     quint32
+ *                         Id (unique key)        utf8
+ *                         Offset (Hz)            quint32
+ *
+ *      Sets the Tx audio offset, as the operator does with the Tx
+ *      frequency control. Offsets below 200 Hz or above 3000 Hz are
+ *      ignored. "Hold Tx Freq" does not change. A Status message
+ *      with the new Tx DF follows at once if the offset changed. In
+ *      FT8 and FT4 a transmission in progress keeps the offset that
+ *      it started with. Extension name "set-tx-df".
  */
 
 #include <QDataStream>
@@ -561,9 +619,29 @@ namespace NetworkMessage
       SwitchConfiguration,
       Configure,
       AnnotationInfo,
-      maximum_message_type_     // ONLY add new message types
+      maximum_message_type_,    // ONLY add new message types
+                                // immediately before here
+
+      // Extension messages of this fork (see "Extension messages"
+      // above). They use fixed values far above the stock types, so
+      // that new upstream types cannot collide with them.
+      Extensions = 50,
+      EnableTx = 51,
+      StartCQ = 52,
+      SetTxOffset = 53,
+      maximum_extension_type_   // ONLY add new extension types
                                 // immediately before here
     };
+
+  // version of the extension contract announced in the Extensions message
+  quint32 constexpr extensions_version {1};
+
+  // true for a stock message type or an extension message type
+  inline bool is_known_type (quint32 type)
+  {
+    return type < maximum_message_type_
+      || (type >= Extensions && type < maximum_extension_type_);
+  }
 
   quint32 constexpr pulse {15}; // seconds
 

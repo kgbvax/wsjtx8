@@ -35,3 +35,7 @@ add_test (test_emulate_split_transceiver test_emulate_split_transceiver)
 add_executable (test_bwf_file test_bwf_file.cpp)
 target_link_libraries (test_bwf_file wsjt_qt wsjt_qtmm Qt5::Test Qt5::Multimedia)
 add_test (test_bwf_file test_bwf_file)
+
+add_executable (test_message_client_extensions test_message_client_extensions.cpp)
+target_link_libraries (test_message_client_extensions wsjt_qt Qt5::Test Qt5::Network)
+add_test (test_message_client_extensions test_message_client_extensions)

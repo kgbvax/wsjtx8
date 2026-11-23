@@ -455,6 +455,10 @@ private slots:
   void remote_configure (QString const& mode, quint32 frequency_tolerance, QString const& submode
                          , bool fast_mode, quint32 tr_period, quint32 rx_df, QString const& dx_call
                          , QString const& dx_grid, bool generate_messages);
+  void remote_enable_tx (bool enable);
+  void remote_start_cq (QString const& modifier);
+  void remote_set_tx_offset (quint32 offset);
+  void select_tx6 (bool restart_transmission);
   void callSandP2(int nline);
   void refreshHoundQueueDisplay();
   void queueActiveWindowHound2(QString text);
