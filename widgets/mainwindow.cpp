@@ -712,6 +712,9 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (m_messageClient, &MessageClient::highlight_callsign, ui->decodedTextBrowser, &DisplayText::highlight_callsign);
   connect (m_messageClient, &MessageClient::switch_configuration, m_multi_settings, &MultiSettings::select_configuration);
   connect (m_messageClient, &MessageClient::configure, this, &MainWindow::remote_configure);
+  connect (m_messageClient, &MessageClient::enable_tx, this, &MainWindow::remote_enable_tx);
+  connect (m_messageClient, &MessageClient::start_cq, this, &MainWindow::remote_start_cq);
+  connect (m_messageClient, &MessageClient::set_tx_offset, this, &MainWindow::remote_set_tx_offset);
 
   // Hook up WSPR band hopping
   connect (ui->band_hopping_schedule_push_button, &QPushButton::clicked
@@ -8809,11 +8812,16 @@ void MainWindow::on_txb5_doubleClicked()
 
 void MainWindow::on_txb6_clicked()
 {
+  select_tx6 (true);
+}
+
+void MainWindow::select_tx6 (bool restart_transmission)
+{
     m_ntx=6;
     m_QSOProgress = CALLING;
     set_dateTimeQSO(-1);
     ui->txrb6->setChecked(true);
-    if(m_transmitting) m_restart=true;
+    if(m_transmitting && restart_transmission) m_restart=true;
     if(m_mode=="MSK144" && !keep_msk144_frequency && m_msk144basefreq > 0 && !programStart && !m_band_changed) {
       setRig(m_msk144basefreq);  // reset MSK144 QSY
       msk144qsy = false;
@@ -15368,6 +15376,56 @@ void MainWindow::configActiveStations()
         m_ActiveStationsWidget->displayRecentStations(m_mode, "");
     }
   }
+}
+
+// UDP extension message Enable Tx, see Network/NetworkMessage.hpp
+void MainWindow::remote_enable_tx (bool enable)
+{
+  // the same as a click on the Enable Tx button, only if the state changes
+  if (enable != ui->autoButton->isChecked ())
+    {
+      ui->autoButton->click ();
+    }
+}
+
+// UDP extension message Start CQ, see Network/NetworkMessage.hpp
+void MainWindow::remote_start_cq (QString const& modifier)
+{
+  // a Fox runs its own sequencer and a Hound never calls CQ
+  if (SpecOp::FOX == m_specOp || SpecOp::HOUND == m_specOp)
+    {
+      qDebug () << "Start CQ ignored in Fox or Hound mode";
+      return;
+    }
+  // the same rule as for the CQ word in the Tx6 field
+  auto const word = modifier.trimmed ().toUpper ();
+  static QRegularExpression const valid_word {"^([A-Z]{1,4}|[0-9]{1,3})$"};
+  if (word.size () && !valid_word.match (word).hasMatch ())
+    {
+      qDebug () << "Start CQ ignored, invalid modifier:" << modifier;
+      return;
+    }
+  m_CQtype = word.size () ? "CQ " + word : QString {"CQ"};
+  genStdMsgs (m_rpt);
+  // select Tx6, a transmission in progress ends normally and the CQ
+  // goes out in the next Tx period
+  select_tx6 (false);
+  // Enable Tx, also when it is already on, so that the CQ selector
+  // (CQ: First, CQ: Max dB, ...) arms for the callers of this CQ
+  auto_tx_mode (true);
+}
+
+// UDP extension message Set Tx Offset, see Network/NetworkMessage.hpp
+void MainWindow::remote_set_tx_offset (quint32 offset)
+{
+  if (offset < 200u || offset > 3000u)
+    {
+      qDebug () << "Set Tx offset ignored, out of range:" << offset;
+      return;
+    }
+  // the same as a change of the Tx frequency control by the operator,
+  // "Hold Tx Freq" does not change
+  ui->TxFreqSpinBox->setValue (static_cast<int> (offset));
 }
 
 void MainWindow::remote_configure (QString const& mode, quint32 frequency_tolerance

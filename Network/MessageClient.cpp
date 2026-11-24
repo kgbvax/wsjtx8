@@ -69,6 +69,7 @@ public:
   void parse_message (QByteArray const&);
   void pending_datagrams ();
   void heartbeat ();
+  void announce_extensions ();
   void closedown ();
   StreamStatus check_status (QDataStream const&) const;
   void send_message (QByteArray const&, bool queue_if_pending = true, bool allow_duplicates = false);
@@ -407,6 +408,43 @@ void MessageClient::impl::parse_message (QByteArray const& msg)
             }
             break;
 
+            case NetworkMessage::EnableTx:
+              {
+                bool enable {false};
+                in >> enable;
+                TRACE_UDP ("Enable Tx enable:" << enable);
+                // the field is required, a short message is ignored
+                if (check_status (in) == OK)
+                  {
+                    Q_EMIT self_->enable_tx (enable);
+                  }
+              }
+              break;
+
+            case NetworkMessage::StartCQ:
+              {
+                QByteArray modifier;
+                in >> modifier;
+                TRACE_UDP ("Start CQ modifier:" << modifier);
+                if (check_status (in) == OK)
+                  {
+                    Q_EMIT self_->start_cq (QString::fromUtf8 (modifier));
+                  }
+              }
+              break;
+
+            case NetworkMessage::SetTxOffset:
+              {
+                quint32 offset {0};
+                in >> offset;
+                TRACE_UDP ("Set Tx offset:" << offset);
+                if (check_status (in) == OK)
+                  {
+                    Q_EMIT self_->set_tx_offset (offset);
+                  }
+              }
+              break;
+
             default:
               // Ignore
               //
@@ -445,6 +483,21 @@ void MessageClient::impl::heartbeat ()
       out << NetworkMessage::Builder::schema_number // maximum schema number accepted
           << version_.toUtf8 () << revision_.toUtf8 ();
       TRACE_UDP ("schema:" << schema_ << "max schema:" << NetworkMessage::Builder::schema_number << "version:" << version_ << "revision:" << revision_);
+      send_message (out, message, false, true);
+      announce_extensions ();
+    }
+}
+
+void MessageClient::impl::announce_extensions ()
+{
+  // the extensions are only handled while incoming requests are
+  // accepted, so they are only announced then
+  if (enabled_ && server_port_ && !server_.isNull ())
+    {
+      QByteArray message;
+      NetworkMessage::Builder out {&message, NetworkMessage::Extensions, id_, schema_};
+      out << NetworkMessage::extensions_version << QByteArray {"tx-enable,cq,set-tx-df"};
+      TRACE_UDP ("version:" << NetworkMessage::extensions_version);
       send_message (out, message, false, true);
     }
 }
