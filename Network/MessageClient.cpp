@@ -445,6 +445,20 @@ void MessageClient::impl::parse_message (QByteArray const& msg)
               }
               break;
 
+            case NetworkMessage::DropQSO:
+              {
+                QByteArray call;
+                bool keep_tx {false};
+                in >> call >> keep_tx;
+                TRACE_UDP ("Drop QSO call:" << call << "keep Tx:" << keep_tx);
+                // both fields are required, a short message is ignored
+                if (check_status (in) == OK)
+                  {
+                    Q_EMIT self_->drop_qso (QString::fromUtf8 (call), keep_tx);
+                  }
+              }
+              break;
+
             default:
               // Ignore
               //
@@ -496,7 +510,7 @@ void MessageClient::impl::announce_extensions ()
     {
       QByteArray message;
       NetworkMessage::Builder out {&message, NetworkMessage::Extensions, id_, schema_};
-      out << NetworkMessage::extensions_version << QByteArray {"tx-enable,cq,set-tx-df"};
+      out << NetworkMessage::extensions_version << QByteArray {"tx-enable,cq,set-tx-df,drop-qso"};
       TRACE_UDP ("version:" << NetworkMessage::extensions_version);
       send_message (out, message, false, true);
     }

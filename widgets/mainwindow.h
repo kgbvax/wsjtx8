@@ -458,6 +458,7 @@ private slots:
   void remote_enable_tx (bool enable);
   void remote_start_cq (QString const& modifier);
   void remote_set_tx_offset (quint32 offset);
+  void remote_drop_qso (QString const& call, bool keep_tx);
   void select_tx6 (bool restart_transmission);
   void callSandP2(int nline);
   void refreshHoundQueueDisplay();
@@ -783,6 +784,9 @@ private:
   float		m_df3;
   int			m_iptt0;
   bool		m_btxok0;
+  // the period number (UTC seconds / Tx period) in which a Drop QSO
+  // stopped a transmission, no new transmission starts in it
+  qint64 m_noTxPeriod {-1};
   int			m_nsendingsh;
   double	m_onAirFreq0;
   bool		m_first_error;

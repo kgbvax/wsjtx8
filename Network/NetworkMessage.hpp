@@ -549,7 +549,7 @@
  *      Sent after each Heartbeat message. "Version" is the version
  *      of the extension contract, currently 1. "Names" is a comma
  *      separated list of the supported extensions, currently
- *      "tx-enable,cq,set-tx-df". A server must ignore names that it
+ *      "tx-enable,cq,set-tx-df,drop-qso". A server must ignore names that it
  *      does not know.
  *
  *
@@ -587,6 +587,26 @@
  *      with the new Tx DF follows at once if the offset changed. In
  *      FT8 and FT4 a transmission in progress keeps the offset that
  *      it started with. Extension name "set-tx-df".
+ *
+ *
+ * Drop QSO       In       54                     quint32
+ *                         Id (unique key)        utf8
+ *                         Call                   utf8
+ *                         Keep Tx                bool
+ *
+ *      Ends the QSO with "Call" without ending the auto sequence.
+ *      The message is ignored if the DX call field is not "Call"
+ *      (without regard to case), and in Fox or Hound mode. A
+ *      transmission in progress stops at once, and no new
+ *      transmission starts in the rest of the period. The DX call,
+ *      the DX grid, the reports and the QSO start are cleared, the
+ *      standard messages are generated without a DX call, the CQ
+ *      selector values are reset and the CQ message (Tx6) is
+ *      selected. With "Keep Tx" true, "Enable Tx" keeps its state,
+ *      so a CQ run goes on in the next Tx period. With "Keep Tx"
+ *      false, "Enable Tx" goes off. A Status message follows at
+ *      once. The Tx offset does not change and the Tx watchdog is
+ *      not reset. Extension name "drop-qso".
  */
 
 #include <QDataStream>
@@ -629,6 +649,7 @@ namespace NetworkMessage
       EnableTx = 51,
       StartCQ = 52,
       SetTxOffset = 53,
+      DropQSO = 54,
       maximum_extension_type_   // ONLY add new extension types
                                 // immediately before here
     };

@@ -141,6 +141,10 @@ public:
   // audio offset in Hz
   Q_SIGNAL void set_tx_offset (quint32 offset);
 
+  // this signal is emitted if the server has requested the end of
+  // the QSO with call, keep_tx false also turns "Enable Tx" off
+  Q_SIGNAL void drop_qso (QString const& call, bool keep_tx);
+
   // this signal is emitted when network errors occur or if a host
   // lookup fails
   Q_SIGNAL void error (QString const&) const;

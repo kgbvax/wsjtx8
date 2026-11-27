@@ -1,6 +1,6 @@
 # UDP extension messages
 
-This fork of WSJT-X adds four messages to the WSJT-X UDP message protocol. An automation client, for example 75auto, uses them to start a CQ, to turn transmit on and off, and to set the Tx offset. Stock WSJT-X has no UDP message for these actions.
+This fork of WSJT-X adds five messages to the WSJT-X UDP message protocol. An automation client, for example 75auto, uses them to start a CQ, to turn transmit on and off, to set the Tx offset, and to end the QSO with one station. Stock WSJT-X has no UDP message for these actions.
 
 This document is for the writers of clients. `Network/NetworkMessage.hpp` is the reference for the wire format. `Network/udp-extensions-plan.md` holds the design notes and the findings from the source code.
 
@@ -12,16 +12,17 @@ This document is for the writers of clients. `Network/NetworkMessage.hpp` is the
 | 51 | Enable Tx | In | Enable (bool) | `tx-enable` |
 | 52 | Start CQ | In | Modifier (utf8) | `cq` |
 | 53 | Set Tx Offset | In | Offset (quint32, Hz) | `set-tx-df` |
+| 54 | Drop QSO | In | Call (utf8), Keep Tx (bool) | `drop-qso` |
 
 "Out" means that WSJT-X sends the message. "In" means that WSJT-X receives the message from a client.
 
-The extension contract has the version 1. The four type numbers are final.
+The extension contract has the version 1. The type numbers are final. Drop QSO came later than the other four messages. A client finds it by its name in the announcement, not by the version.
 
 ## Message numbers
 
 The stock protocol uses the types 0 to 16. The extensions use fixed numbers from 50. If upstream WSJT-X adds new types, the new types get the next free number after 16. Thus they cannot collide with the extensions.
 
-WSJT-X accepts the stock types and the types 50 to 53. It treats every other type as unrecognized and ignores it. This is the same as in stock WSJT-X.
+WSJT-X accepts the stock types and the types 50 to 54. It treats every other type as unrecognized and ignores it. This is the same as in stock WSJT-X.
 
 ## Wire format
 
@@ -53,7 +54,7 @@ WSJT-X sends this message directly after each Heartbeat. A Heartbeat goes out ev
 | Field | Type | Value |
 |---|---|---|
 | Version | quint32 | The version of the extension contract, now 1. |
-| Names | utf8 | A comma-separated list of the supported extensions, now `tx-enable,cq,set-tx-df`. |
+| Names | utf8 | A comma-separated list of the supported extensions, now `tx-enable,cq,set-tx-df,drop-qso`. |
 
 A client uses this message to find out whether the WSJT-X instance is patched. Stock WSJT-X never sends type 50. If a client receives a Heartbeat but no Extensions message, the instance is stock WSJT-X, or "Accept UDP requests" is off.
 
@@ -111,6 +112,30 @@ In two cases, WSJT-X forces a different offset. The Status then shows the forced
 1. In SuperFox Fox mode, WSJT-X sets the offset to 750 Hz.
 2. On 60 m, if the own call sign starts with G, M, or 2, WSJT-X lowers the offset so that the signal stays below 5358 kHz. WSJT-X also shows a message box.
 
+## Drop QSO (54, in)
+
+| Field | Type | Value |
+|---|---|---|
+| Call | utf8 | The DX call of the QSO to end. |
+| Keep Tx | bool | True: "Enable Tx" keeps its state. False: "Enable Tx" goes off. |
+
+The message ends the QSO with one station, but it does not end the auto sequence of a CQ run. The Stop button and Halt Tx end both.
+
+WSJT-X ignores the message in these cases:
+
+1. The DX call field is not Call. The compare ignores case. Thus a late message cannot end a QSO with another station.
+2. WSJT-X is in Fox mode or in Hound mode.
+
+Otherwise WSJT-X does these steps:
+
+1. If WSJT-X transmits, it stops the transmission at once. No new transmission starts in the rest of this period, so no late CQ goes out in it.
+2. It clears the DX call, the DX grid, the reports, and the start time of the QSO. It generates the standard messages without a DX call. It resets the values of the CQ selector, for example the best signal of "CQ: Max dB".
+3. It selects the CQ message (Tx6). The word of a directed CQ stays.
+4. If Keep Tx is true, "Enable Tx" keeps its state. If it is on, the CQ goes out in the next Tx period of the selected period parity, and the CQ selector answers the next caller. If Keep Tx is false, "Enable Tx" goes off.
+5. It sends a Status message at once.
+
+The message does not reset the Tx watchdog, and the Tx offset does not change.
+
 ## Example datagrams
 
 These examples use the Id `WSJT-X` and schema 3. The bytes are in hexadecimal.
@@ -137,6 +162,15 @@ Set Tx Offset with the offset 1500 Hz:
 ad bc cb da  00 00 00 03  00 00 00 35
 00 00 00 06  57 53 4a 54 2d 58
 00 00 05 dc
+```
+
+Drop QSO for K1ABC with Keep Tx set to true:
+
+```text
+ad bc cb da  00 00 00 03  00 00 00 36
+00 00 00 06  57 53 4a 54 2d 58
+00 00 00 05  4b 31 41 42 43
+01
 ```
 
 ## Tests
