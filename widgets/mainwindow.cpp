@@ -715,6 +715,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
   connect (m_messageClient, &MessageClient::enable_tx, this, &MainWindow::remote_enable_tx);
   connect (m_messageClient, &MessageClient::start_cq, this, &MainWindow::remote_start_cq);
   connect (m_messageClient, &MessageClient::set_tx_offset, this, &MainWindow::remote_set_tx_offset);
+  connect (m_messageClient, &MessageClient::drop_qso, this, &MainWindow::remote_drop_qso);
 
   // Hook up WSPR band hopping
   connect (ui->band_hopping_schedule_push_button, &QPushButton::clicked
@@ -7805,7 +7806,10 @@ void MainWindow::guiUpdate()
     int msgLength=txMsg.trimmed().length();
     if(msgLength==0 and !m_tune) on_stopTxButton_clicked();
 
-    if(g_iptt==0 and ((m_bTxTime and (fTR < 0.75) and (msgLength>0)) or m_tune)) {
+    // a Drop QSO stopped a transmission in this period, so no late
+    // start in the same period
+    bool const dropped_this_period = m_noTxPeriod == static_cast<qint64> (tsec / m_TRperiod);
+    if(g_iptt==0 and ((m_bTxTime and (fTR < 0.75) and (msgLength>0) and !dropped_this_period) or m_tune)) {
       //### Allow late starts
       icw[0]=m_ncw;
       g_iptt = 1;
@@ -15426,6 +15430,52 @@ void MainWindow::remote_set_tx_offset (quint32 offset)
   // the same as a change of the Tx frequency control by the operator,
   // "Hold Tx Freq" does not change
   ui->TxFreqSpinBox->setValue (static_cast<int> (offset));
+}
+
+// UDP extension message Drop QSO, see Network/NetworkMessage.hpp
+void MainWindow::remote_drop_qso (QString const& call, bool keep_tx)
+{
+  // a Fox runs its own sequencer and a Hound has its own QSO logic
+  if (SpecOp::FOX == m_specOp || SpecOp::HOUND == m_specOp)
+    {
+      qDebug () << "Drop QSO ignored in Fox or Hound mode";
+      return;
+    }
+  // a late message must not end a QSO with another station
+  auto const dx_call = ui->dxCallEntry->text ().trimmed ();
+  if (!dx_call.size () || dx_call.compare (call.trimmed (), Qt::CaseInsensitive))
+    {
+      qDebug () << "Drop QSO ignored, the DX call is" << dx_call << "not" << call;
+      return;
+    }
+  if (m_transmitting)
+    {
+      // stop the signal now, guiUpdate ends the transmission at its
+      // next tick and starts no new one in this period
+      // the same time base as guiUpdate: milliseconds of the UTC day
+      qint64 const ms = QDateTime::currentMSecsSinceEpoch () % 86400000;
+      m_noTxPeriod = static_cast<qint64> (0.001 * ms / m_TRperiod);
+      m_btxok = false;
+    }
+  bool const enabled = m_auto;
+  // the same state as at the end of a QSO: no DX call, no reports,
+  // standard messages without a DX call, CQ selector reset, Tx6
+  m_QSOProgress = CALLING;
+  clearDX ();
+  ui->dxGridEntry->clear ();
+  select_tx6 (false);
+  m_bAutoReply = false;
+  // keep Enable Tx in a CQ run, so that the CQ selector answers the
+  // next caller, else turn it off
+  if (keep_tx && enabled)
+    {
+      auto_tx_mode (true);
+    }
+  else if (m_auto)
+    {
+      auto_tx_mode (false);
+    }
+  statusUpdate ();
 }
 
 void MainWindow::remote_configure (QString const& mode, quint32 frequency_tolerance
